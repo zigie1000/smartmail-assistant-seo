@@ -1,0 +1,82 @@
+<?php
+
+class SmartMail_Assistant_SEO {
+    public function run() {
+        add_action('admin_menu', array($this, 'add_plugin_admin_menu'));
+        add_action('admin_init', array($this, 'setup_settings'));
+        add_action('save_post', array($this, 'analyze_content'));
+    }
+
+    public function add_plugin_admin_menu() {
+        add_menu_page(
+            'SmartMail Assistant SEO',
+            'SEO Assistant',
+            'manage_options',
+            'smartmail-assistant-seo',
+            array($this, 'display_plugin_admin_page'),
+            'dashicons-chart-line',
+            6
+        );
+    }
+
+    public function display_plugin_admin_page() {
+        include_once 'admin/admin-settings.php';
+    }
+
+    public function setup_settings() {
+        register_setting('smartmail_assistant_seo_options', 'smartmail_assistant_seo_api_key');
+
+        add_settings_section(
+            'smartmail_assistant_seo_main_section',
+            'Main Settings',
+            null,
+            'smartmail_assistant_seo'
+        );
+
+        add_settings_field(
+            'smartmail_assistant_seo_api_key',
+            'OpenAI API Key',
+            array($this, 'api_key_field_html'),
+            'smartmail_assistant_seo',
+            'smartmail_assistant_seo_main_section'
+        );
+    }
+
+    public function api_key_field_html() {
+        $api_key = get_option('smartmail_assistant_seo_api_key');
+        echo '<input type="text" name="smartmail_assistant_seo_api_key" value="' . esc_attr($api_key) . '" class="regular-text" />';
+    }
+
+    public function analyze_content($post_id) {
+        // Content analysis logic using AI
+        if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
+        if (!current_user_can('edit_post', $post_id)) return;
+
+        $post_content = get_post_field('post_content', $post_id);
+        $keywords = $this->generate_keywords($post_content);
+        $this->save_keywords($post_id, $keywords);
+    }
+
+    private function generate_keywords($content) {
+        // Call to AI service to generate keywords
+        $api_key = get_option('smartmail_assistant_seo_api_key');
+        $response = wp_remote_post('https://api.openai.com/v1/engines/davinci-codex/completions', array(
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type' => 'application/json'
+            ),
+            'body' => json_encode(array(
+                'prompt' => 'Generate SEO keywords for the following content: ' . $content,
+                'max_tokens' => 50
+            ))
+        ));
+
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+        return $data['choices'][0]['text'];
+    }
+
+    private function save_keywords($post_id, $keywords) {
+        update_post_meta($post_id, '_seo_keywords', $keywords);
+    }
+}
